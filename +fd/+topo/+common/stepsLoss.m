@@ -1,0 +1,6 @@
+function L = stepsLoss(I)
+%FD.TOPO.COMMON.STEPSLOSS  Loss-estimate step for coupled-resonator designs.
+L = {'STEP 6 - Loss estimate', ...
+     sprintf('  Resonator unloaded Q (conductor + dielectric) Qu = %.0f', I.Qu), ...
+     sprintf('  IL(f0) ~ 4.343 * sum(g) / (FBW Qu) = %.2f dB', I.ILest)};
+end
