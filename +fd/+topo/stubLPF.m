@@ -66,5 +66,5 @@ end
 
 function w = warn(d, ~, ~, ~)
 w = {};
-if d.W0 < 0.15e-3, w{end+1} = sprintf('Series line %.3f mm is below a safe JLCPCB track width.', d.W0*1e3); end
+if d.W0 < 0.15e-3, w{end+1} = sprintf('Series line %.3f mm is below a safe track width for typical prototype fabs (0.15 mm).', d.W0*1e3); end
 end

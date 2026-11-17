@@ -1,7 +1,8 @@
 function S = srrS(d, sub, f)
 %FD.SRRS  Microstrip line loaded by pairs of square SRRs (resonatorSplitRingSquare).
-%   d fields (m): a, w, sp, gs, gc (gap line-to-ring), N pairs, pitch
-%   (centre-to-centre), W0 line width, Lline line length; optional kF
+%   d fields (m): a, w, sp, gs, gc (gap line-to-ring), N pairs, gp (gap
+%   between pairs, edge to edge as in the toolbox), W0 line width; line
+%   length from fd.srrLine; optional kF
 %   (frequency scale) and kM (coupling scale) from EM calibration.
 %   Each SRR couples magnetically to the line: it adds a series impedance
 %   (w M)^2 / Zsrr to the line, Zsrr = R + j w Ls + 1/(j w Cs). One ring sits
@@ -22,8 +23,10 @@ R = Rs*4*am/d.w + w0*Ls*sub.tand*0.5;            % copper + dielectric (approx.)
 Zsrr = R + 1j*w*Ls + 1./(1j*w*Cs);
 Zser = 2*(w*M).^2 ./ Zsrr;                       % two rings per position
 [Z0, e0, a0] = fd.msl(d.W0, sub, f);
-x = ((1:d.N) - (d.N + 1)/2)*d.pitch;              % ring-pair centres
-edges = [-d.Lline/2, x, d.Lline/2];
+pitch = d.gp + d.a + 2*(d.sp + d.w);             % centre to centre
+x = ((1:d.N) - (d.N + 1)/2)*pitch;                % ring-pair centres
+Lline = fd.srrLine(d);
+edges = [-Lline/2, x, Lline/2];
 nn = 0; el = fd.el('line', [1 1]); el(:) = [];
 P1 = 1; nn = 1; prev = P1;
 for k = 1:d.N

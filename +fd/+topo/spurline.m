@@ -87,5 +87,5 @@ end
 
 function w = warn(d, ~, ~, ~)
 w = {};
-if d.Wc < 0.15e-3, w{end+1} = 'Spur narrower than 0.15 mm - check JLCPCB track width.'; end
+if d.Wc < 0.15e-3, w{end+1} = 'Spur narrower than 0.15 mm - check your fab''s minimum track width.'; end
 end

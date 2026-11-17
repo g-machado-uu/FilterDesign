@@ -1,5 +1,5 @@
 function files = writeGerber(obj, folder, name)
-%FD.WRITEGERBER  Write RS-274X Gerber + Excellon files (JLCPCB accepts these).
+%FD.WRITEGERBER  Write RS-274X Gerber + Excellon files (standard formats accepted by PCB fabs).
 %   files = fd.writeGerber(obj, folder, name)
 %   obj is an RF PCB Toolbox object (from fd.toToolbox). Uses the generic
 %   PCBWay writer format (standard Gerber) with its upload hook DISABLED,

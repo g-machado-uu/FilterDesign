@@ -1,7 +1,7 @@
 classdef FilterDesigner < handle
 %FILTERDESIGNER  Teaching app: design microstrip filters and resonators,
 %see their layout, dimensions and response, tune them live, check them
-%with EM and export them for fabrication (JLCPCB).
+%with EM and export them for fabrication (Gerber).
 %
 %   FilterDesigner              % open the app
 %   app = FilterDesigner;       % keep a handle (for scripting/screenshots)
@@ -10,7 +10,7 @@ classdef FilterDesigner < handle
 %   Workflow
 %     1. Choose the response (lowpass, highpass, bandpass, bandstop or a
 %        single resonator) and then the topology.
-%     2. Enter the specification and choose the board (JLCPCB substrates).
+%     2. Enter the specification and choose the board (substrate presets).
 %     3. "Synthesise" computes dimensions step by step (see "Design steps").
 %     4. Move the sliders in "Tune" - the response updates instantly
 %        (circuit model). "Optimise" tunes automatically.
@@ -81,8 +81,8 @@ classdef FilterDesigner < handle
         end
 
         function select(app, id)
-            %SELECT  Switch to topology ID (fd.topologies ids), load its
-            %example specification and synthesise.
+            %SELECT  Switch to topology ID (fd.topologies ids) and load its
+            %example specification. Nothing is computed until Synthesise.
             k = find(strcmp({app.All.id}, id), 1);
             if isempty(k), error('fd:app', 'Unknown topology "%s".', id); end
             app.KindDD.Value = app.All(k).kind; app.fillTopologies();
@@ -146,7 +146,7 @@ classdef FilterDesigner < handle
             app.OrderSP = uispinner(pg, 'Value', 5, 'Limits', [1 9], 'Step', 1, 'RoundFractionalValues', 'on');
             uilabel(pg, 'Text', 'Min gap (mm)');
             app.MinGapEF = uieditfield(pg, 'numeric', 'Value', 0.15, 'Limits', [0.05 5], ...
-                'Tooltip', 'Smallest copper gap/track the fab can make. JLCPCB 2-layer: 0.1-0.15 mm.');
+                'Tooltip', 'Smallest copper gap/track your fab can make. Typical 2-layer prototype fabs: 0.1-0.15 mm.');
             uilabel(pg, 'Text', 'Need (dB)', 'Tooltip', 'Order helper: attenuation you need ...');
             app.AsEF = uieditfield(pg, 'numeric', 'Value', 30, 'Limits', [1 150]);
             uilabel(pg, 'Text', 'at f (GHz)', 'Tooltip', '... at this frequency.');
@@ -157,7 +157,7 @@ classdef FilterDesigner < handle
             app.ParamGrid = uigridlayout(pg, [1 2]); app.ParamGrid.Layout.Column = [1 4];
             app.ParamGrid.ColumnWidth = {'1x', 70}; app.ParamGrid.Padding = [0 0 0 0];
 
-            p = uipanel(L, 'Title', '3. Board (JLCPCB)', 'FontWeight', 'bold');
+            p = uipanel(L, 'Title', '3. Board', 'FontWeight', 'bold');
             pg = uigridlayout(p, [5 4]); pg.RowHeight = {24, 24, 24, 24, 'fit'};
             pg.ColumnWidth = {'1x', 70, '1x', 70}; pg.Padding = [6 4 6 4];
             app.SubDD = uidropdown(pg, 'Items', {app.SubList.name}, 'ItemsData', 1:numel(app.SubList), ...
@@ -268,7 +268,7 @@ classdef FilterDesigner < handle
         end
 
         function onTopoChanged(app)
-            % load the topology's example spec into the UI, then synthesise
+            % load the topology's example spec into the UI; wait for Synthesise
             T = app.All(strcmp({app.All.id}, app.TopoDD.Value)); app.T = T;
             app.Blurb.Value = T.blurb;
             s = T.defaults; k = T.kind;
@@ -309,7 +309,24 @@ classdef FilterDesigner < handle
                 app.CalBtn.Tooltip = 'This design is small: use "EM full design" (it offers calibration).';
             end
             app.Cal = []; app.EM = [];
-            app.synthesise();
+            app.clearResults();
+        end
+
+        function clearResults(app)
+            % forget the previous design; nothing is shown until Synthesise
+            app.D = []; app.DSynth = []; app.Info = [];
+            delete(app.TuneGrid.Children); app.Sliders(:) = [];
+            set([app.L21 app.L11 app.LEM21 app.LEM11 app.LIdeal21 app.LIdeal11], 'XData', NaN, 'YData', NaN);
+            set([app.LEM21 app.LEM11 app.LIdeal21 app.LIdeal11], 'HandleVisibility', 'off');
+            delete(findobj(app.AxResp, 'Tag', 'band'));
+            title(app.AxResp, 'Set the specification, then press "Synthesise"', ...
+                'FontSize', 10, 'FontWeight', 'normal');
+            cla(app.AxLay); title(app.AxLay, '');
+            text(app.AxLay, 0.5, 0.5, 'No design yet: press "Synthesise"', 'Units', 'normalized', ...
+                'HorizontalAlignment', 'center', 'Color', [0.4 0.4 0.4]);
+            app.DimTable.Data = {};
+            app.StepsText.Value = {'Press "Synthesise" to see the design steps.'};
+            cla(app.AxK); cla(app.AxQ);
         end
 
         function onSubChanged(app)
@@ -401,7 +418,16 @@ classdef FilterDesigner < handle
                 app.log('Synthesised %s.', app.describe());
                 app.warnings();
             catch e
-                uialert(app.Fig, e.message, 'Synthesis failed');
+                msg = e.message;
+                if ~startsWith(e.identifier, 'fd:')     % a raw MATLAB error: add context
+                    msg = sprintf(['The %s design could not be computed for these inputs.\n\n' ...
+                        'Usually one of the numbers is outside what this topology can do ' ...
+                        '(a frequency too high or low for this board, or a width/gap that is too ' ...
+                        'large or small). Try the example values again (re-select the topology), ' ...
+                        'then change one number at a time.\n\nDetails: %s'], app.T.name, e.message);
+                end
+                app.log('Synthesis failed: %s', e.message);
+                uialert(app.Fig, msg, 'Synthesis failed');
             end
         end
 
@@ -432,8 +458,13 @@ classdef FilterDesigner < handle
         function emCalibrate(app)
             T = app.T;
             if ~strcmp(T.em, 'section') || isempty(app.D) || app.Busy, return; end
+            lock = app.lockEM(app.CalBtn); %#ok<NASGU>
             d0 = app.D; if ~isempty(app.Cal), d0 = fd.applyCal(d0, [], T); end
+            dlg = uiprogressdlg(app.Fig, 'Title', 'EM calibrate', 'Indeterminate', 'on', ...
+                'Message', 'Preparing the EM section (mesh and memory estimate)…');
+            cDlg = onCleanup(@() delete(dlg));
             [obj, dSec, f, info] = T.emSection(d0, app.Sub, app.Spec);
+            delete(dlg);
             if ~info.ok
                 uialert(app.Fig, sprintf(['The EM section needs %s of memory; the budget on this ' ...
                     'computer is %.1f GB. Try a thinner board.'], info.memStr, info.budgetGB), ...
@@ -460,17 +491,22 @@ classdef FilterDesigner < handle
             if ~isempty(T.pack) && strcmp(uiconfirm(app.Fig, ['The circuit model is now corrected ' ...
                     'to match EM. Re-optimise the design with the corrected model?'], 'Calibrated', ...
                     'Options', {'Optimise', 'Later'}), 'Optimise')
-                app.optimise();
+                b = app.Busy; app.Busy = false; app.optimise(); app.Busy = b;
             end
         end
 
         function emFull(app)
             if isempty(app.D) || app.Busy, return; end
+            lock = app.lockEM(app.EMBtn); %#ok<NASGU>
             T = app.T;
+            dlg = uiprogressdlg(app.Fig, 'Title', 'EM full design', 'Indeterminate', 'on', ...
+                'Message', 'Preparing the EM model (mesh and memory estimate)… this can take a while.');
+            cDlg = onCleanup(@() delete(dlg));
             obj = T.toolbox(app.D, app.Sub);
             if strcmp(T.id, 'hairpin'), obj.GroundPlaneWidth = app.D.La + 6*app.Sub.h; end
             fm = fd.topo.common.centre(T, app.Spec, app.Info);
             [obj, info] = fd.emPrepare(obj, app.Sub, fm);
+            delete(dlg);
             coarse = false;
             if ~info.ok
                 if ~app.AdvCB.Value
@@ -488,7 +524,9 @@ classdef FilterDesigner < handle
             f = fd.topo.common.emFreqs(T, app.Spec, app.Info, 'coarse');
             refine = strcmp(T.kind, 'RES') || strcmp(T.id, 'spurline');
             notch = app.isNotch();
-            msg = sprintf('Run MoM on the full design (%d points%s, %s mesh, memory %s)?', numel(f), ...
+            msg = sprintf(['Run MoM on the full design (%d points%s, %s mesh, memory %s)?\n\n' ...
+                'This can take several minutes. The app is locked while it runs; ' ...
+                'the progress window shows the time left and has a Cancel button.'], numel(f), ...
                 ternary(refine, ' + 6 around the resonance', ''), ...
                 ternary(coarse, 'COARSE default', sprintf('%.2f mm', info.edge*1e3)), info.memStr);
             if ~strcmp(uiconfirm(app.Fig, msg, 'EM full design', 'Options', {'Run', 'Cancel'}), 'Run'), return; end
@@ -522,7 +560,7 @@ classdef FilterDesigner < handle
         end
 
         function s = runEM(app, obj, f, title_)
-            app.Busy = true; c1 = onCleanup(@() app.setBusy(false));
+            was = app.Busy; app.Busy = true; c1 = onCleanup(@() app.setBusy(was));
             dlg = uiprogressdlg(app.Fig, 'Title', title_, 'Cancelable', 'on', ...
                 'Message', 'Meshing and solving the first point…');
             c2 = onCleanup(@() delete(dlg));
@@ -536,6 +574,20 @@ classdef FilterDesigner < handle
         end
 
         function setBusy(app, b), app.Busy = b; end
+
+        function c = lockEM(app, btn)
+            % block a second click while an EM job is being prepared/run:
+            % mark the app busy and grey out the action buttons until done
+            app.Busy = true; txt = btn.Text; btn.Text = 'EM running…';
+            btns = [app.SynthBtn app.OptBtn app.ResetBtn app.CalBtn app.EMBtn app.ExportBtn];
+            en = get(btns, 'Enable'); set(btns, 'Enable', 'off'); drawnow;
+            c = onCleanup(@() unlock());
+            function unlock()
+                app.Busy = false;
+                if isvalid(btn), btn.Text = txt; end
+                for k = 1:numel(btns), if isvalid(btns(k)), btns(k).Enable = en{k}; end, end
+            end
+        end
 
         % --------------------------------------------------------- plots --
         function refresh(app, redrawLayout)
@@ -694,6 +746,23 @@ classdef FilterDesigner < handle
                             sprintf('%.2f', d.len(i)*1e3), 'HorizontalAlignment', 'center', 'FontSize', fs);
                         x = x + d.len(i);
                     end
+                case 'srr'
+                    if d.N < 2, return; end
+                    aOut = d.a + 2*(d.sp + d.w); pitch = d.gp + aOut;
+                    x1 = (-(d.N - 1)/2*pitch + aOut/2)*1e3;  % right edge of pair 1
+                    x2 = x1 + d.gp*1e3;                       % left edge of pair 2
+                    y = (d.W0/2 + d.gc + aOut)*1e3 + 1;
+                    plot(ax, [x1 x2], [y y], 'k-', 'LineWidth', 0.8, 'Marker', '|', 'MarkerSize', 8);
+                    text(ax, (x1 + x2)/2, y + 0.4, sprintf('gap %.2f', d.gp*1e3), ...
+                        'HorizontalAlignment', 'center', 'VerticalAlignment', 'bottom', 'FontSize', fs);
+                case 'csrr'
+                    if ~isfield(d, 'N') || d.N < 2, return; end
+                    aOut = d.a + 2*(d.sp + d.w); [~, ~, xc] = fd.csrrBoard(d);
+                    x1 = (xc(1) + aOut/2)*1e3; x2 = (xc(2) - aOut/2)*1e3;
+                    y = aOut/2*1e3 + 1;
+                    plot(ax, [x1 x2], [y y], 'k-', 'LineWidth', 0.8, 'Marker', '|', 'MarkerSize', 8);
+                    text(ax, (x1 + x2)/2, y + 0.4, sprintf('gap %.2f', d.gp*1e3), ...
+                        'HorizontalAlignment', 'center', 'VerticalAlignment', 'bottom', 'FontSize', fs);
             end
         end
 
@@ -855,7 +924,7 @@ classdef FilterDesigner < handle
             '   corrects the fast circuit model; "EM full design" simulates everything'
             '   (small designs only) and can also calibrate. Then Optimise again.'
             '8. "Export" writes dimensions (CSV), S-parameters (.s2p), pictures and'
-            '   Gerber files for JLCPCB.'
+            '   Gerber files to send to any PCB fab.'
             ''
             'CURVES'
             '  dashed black  = ideal response (perfect synthesis, same resonator loss)'

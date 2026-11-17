@@ -2,7 +2,7 @@
 
 A teaching app for designing microstrip filters without HFSS: type a specification,
 see the layout, the dimensions and the response, tune the dimensions with sliders
-(instant feedback), check with full-wave EM, and export Gerbers for JLCPCB.
+(instant feedback), check with full-wave EM, and export Gerbers for fabrication.
 
 ```matlab
 cd FilterDesign
@@ -34,7 +34,7 @@ deliberately avoid the UK 5G bands.
 
 ## Student workflow
 1. **Spec** – band edges (or cutoff), response, ripple, order (*Suggest order* helps).
-2. **Board** – JLCPCB FR4 (default), RO4350B or PTFE. FR4 is lossy: a narrow
+2. **Board** – FR4 (default) or an RF laminate (RO4350B, RO4003C, RO3003, RO3010, RT/duroid 5880, I-Tera, FR408HR, PTFE). FR4 is lossy: a narrow
    bandpass on FR4 costs several dB; the app tells you how much.
 3. **Synthesise** – read the *Design steps* tab: every number from g-values to mm.
 4. **Tune** – move sliders and learn: longer arms → lower frequency; smaller gaps →

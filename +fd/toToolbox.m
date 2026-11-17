@@ -79,8 +79,9 @@ switch type
         obj.Height = sub.h; obj.Substrate = diel; obj.Conductor = cond;
         obj.RingLengthInner = d.a; obj.RingWidth = d.w; obj.RingSpacing = d.sp;
         obj.SplitGap = d.gs; obj.CouplingGap = d.gc; obj.NumResonator = d.N;
-        obj.ResonatorSpacing = d.pitch; obj.PortLineWidth = d.W0;
-        obj.PortLineLength = d.Lline; setIf(obj, 'GroundPlaneLength', d.Lline);
+        obj.ResonatorSpacing = d.gp; obj.PortLineWidth = d.W0;    % edge-to-edge gap
+        Lline = fd.srrLine(d);
+        obj.PortLineLength = Lline; setIf(obj, 'GroundPlaneLength', Lline);
         aOut = d.a + 2*(d.sp + d.w);
         setIf(obj, 'GroundPlaneWidth', 2*(d.W0/2 + d.gc + aOut) + 2*max(3e-3, 4*sub.h));
     case 'csrr'

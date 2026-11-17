@@ -78,7 +78,7 @@ end
 
 function w = warn(d, I, s, ~)
 w = {};
-if d.WH < 0.15e-3, w{end+1} = sprintf('High-Z line is %.3f mm wide - below a safe JLCPCB track width (0.15 mm).', d.WH*1e3); end
+if d.WH < 0.15e-3, w{end+1} = sprintf('High-Z line is %.3f mm wide - below a safe track width for typical prototype fabs (0.15 mm).', d.WH*1e3); end
 lam = 299792458/(s.fc*sqrt(I.eL));
 if d.WL > lam/8, w{end+1} = sprintf('Low-Z line is wide (%.1f mm > lambda/8): expect transverse resonances; raise Low Z.', d.WL*1e3); end
 end

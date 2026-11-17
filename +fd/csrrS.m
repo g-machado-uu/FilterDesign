@@ -1,8 +1,11 @@
 function [S, fz] = csrrS(d, sub, f)
 %FD.CSRRS  Microstrip line over a CSRR etched in the ground plane.
 %   d fields (m): a (outer side of the inner slot ring), w slot width, sp
-%   metal between the slots, gs split, W0 line width, Lline, Wb board
-%   width; optional kF, kC (EM calibration).
+%   metal between the slots, gs split, W0 line width, N cells along the
+%   line a gap gp apart (edge to edge; optional, default 1); board size
+%   from fd.csrrBoard; optional kF, kC (EM calibration).
+%   N cells: N identical shunt branches, line sections in between (the
+%   cell-to-cell coupling is not modelled).
 %   Model (Baena/Bonache): the line couples to the CSRR's inner patch through
 %   Cc; the CSRR is a parallel Lr-Cr tank to ground (Babinet dual of the
 %   SRR). This gives a transmission zero at f_z = 1/(2 pi sqrt(Lr (Cc+Cr)))
@@ -21,8 +24,12 @@ G = w*Cr*sub.tand + 1e-4;                        % tank loss (dielectric + radia
 Ysh = 1j*w*Cr + 1./(1j*w*Lr) + G;
 Zb = 1./(1j*w*Cc) + 1./Ysh;
 [Z0, e0l, a0] = fd.msl(d.W0, sub, f);
-el = [fd.el('line', [1 2], 'Zc', Z0, 'ee', e0l, 'alpha', a0, 'len', d.Lline/2), ...
-      fd.el('line', [2 3], 'Zc', Z0, 'ee', e0l, 'alpha', a0, 'len', d.Lline/2), ...
-      fd.el('shunt', 2, 'Y', 1./Zb)];
-S = fd.circuitS(el, 3, [1 3], f, 50);
+[L, ~, xc] = fd.csrrBoard(d); N = numel(xc);
+edges = [-L/2, xc, L/2];                         % port 1 = node 1, cell k = node k+1
+el = fd.el('shunt', 2, 'Y', 1./Zb); el(:) = [];
+for k = 1:N + 1
+    el(end+1) = fd.el('line', [k k+1], 'Zc', Z0, 'ee', e0l, 'alpha', a0, 'len', edges(k+1) - edges(k)); %#ok<AGROW>
+end
+for k = 1:N, el(end+1) = fd.el('shunt', k + 1, 'Y', 1./Zb); end %#ok<AGROW>
+S = fd.circuitS(el, N + 2, [1 N+2], f, 50);
 end

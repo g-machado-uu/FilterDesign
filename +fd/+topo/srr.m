@@ -31,12 +31,14 @@ end
 
 function [d, I] = synth(spec, sub)
 w = spec.w*1e-3; sp = max(spec.sp*1e-3, spec.minGap);
-fa = @(a) log(getf0(a, w, sp, sub)/spec.f0);
-a = fzero(fa, [w*2 + 0.3e-3, 60e-3]);
+a = fd.topo.common.solveSize(@(a) getf0(a, w, sp, sub), spec.f0, [w*2 + 0.3e-3, 60e-3], 'An SRR', ...
+    ['make "Ring width" and "Ring spacing" smaller (a smaller SRR then fits), ' ...
+     'or use a lower-εr board. Above ~10 GHz an SRR gets very small and hard to make.'], ...
+    ['make "Ring spacing" smaller (more capacitance), use a higher-εr board, ' ...
+     'or accept a higher f0.']);
 aOut = a + 2*(sp + w);
 d = struct('a', a, 'w', w, 'sp', sp, 'gs', max(sp, 0.3e-3), 'gc', max(spec.gc*1e-3, spec.minGap), ...
-    'N', round(spec.N), 'pitch', aOut + max(2e-3, aOut/2), 'W0', fd.mslWidth(50, sub, spec.f0), 'Lline', NaN);
-d.Lline = max(d.N*d.pitch + 2*max(10e-3, aOut), 30e-3);
+    'N', round(spec.N), 'gp', max(2e-3, aOut/2), 'W0', fd.mslWidth(50, sub, spec.f0));
 [Ls, Cs, f0, parts] = fd.srrLC(a, w, sp, sub);
 I = struct('f0', spec.f0, 'Ls', Ls, 'Cs', Cs, 'fcalc', f0, 'parts', parts, 'aOut', aOut);
 end
@@ -53,6 +55,9 @@ rows = {'Inner ring size a', 'a', 1, 0.5*d.a, 1.5*d.a, false;
         'Ring width', 'w', 1, 0.15e-3, 3*d.w, false;
         'Ring spacing', 'sp', 1, spec.minGap, 4*d.sp, false;
         'Gap to line', 'gc', 1, spec.minGap, 3e-3, false};
+if d.N > 1
+    rows(end+1, :) = {'Gap between pairs', 'gp', 1, spec.minGap, max(3*d.gp, 10e-3), false};
+end
 end
 
 function c = dims(d, ~, ~)
@@ -62,8 +67,12 @@ c = {'Inner ring outer side a', mm(d.a), 'RingLengthInner (sets f0 most strongly
      'Ring width', mm(d.w), 'Both rings'; 'Ring spacing', mm(d.sp), 'Gap between the rings';
      'Split gap', mm(d.gs), 'Cut in each ring (opposite sides)';
      'Gap to line', mm(d.gc), 'Line edge to outer ring';
-     'Line width', mm(d.W0), '50 Ω'; 'Line length', mm(d.Lline), 'Board length';
+     'Line width', mm(d.W0), '50 Ω'; 'Line length', mm(fd.srrLine(d)), 'Board length';
      'Ring pairs', d.N, 'One ring each side of the line per pair'};
+if d.N > 1
+    c(end+1:end+2, :) = {'Gap between pairs', mm(d.gp), 'Edge to edge, along the line (outer ring to outer ring)';
+                         'Pair pitch', mm(d.gp + aOut), 'Centre to centre, along the line'};
+end
 end
 
 function L = steps(d0, I, s, sub)
@@ -77,6 +86,10 @@ L = {sprintf('STEP 1 - Target f0 = %.4f GHz on %s h = %.2f mm', s.f0/1e9, sub.na
      sprintf('STEP 3 - f0 = 1/(2 pi sqrt(Ls Cs)); solved for a = %.3f mm (outer size %.3f mm)', d0.a*1e3, I.aOut*1e3), ...
      'STEP 4 - Coupling: the line''s field threads the rings (mutual inductance M);', ...
      '  each ring adds (w M)^2 / Z_SRR in series with the line -> notch at f0.', ...
+     sprintf('STEP 5 - %d pair(s) along the line, %.2f mm apart edge to edge (pitch %.2f mm):', ...
+             d0.N, d0.gp*1e3, (d0.gp + I.aOut)*1e3), ...
+     '  more pairs = deeper, wider notch. Pairs too close also couple to each other', ...
+     '  (not in this model), which shifts and splits the notch.', ...
      'NOTE - this model is approximate (+/-10-15 %): run "EM full" (small and fast)', ...
      '  and "Calibrate" to correct it.'};
 end
